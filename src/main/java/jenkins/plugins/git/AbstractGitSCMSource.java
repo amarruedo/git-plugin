@@ -168,7 +168,7 @@ public abstract class AbstractGitSCMSource extends SCMSource {
 
     public AbstractGitSCMSource() {
     }
-    
+
     @Deprecated
     public AbstractGitSCMSource(String id) {
         setId(id);
@@ -532,7 +532,7 @@ public abstract class AbstractGitSCMSource extends SCMSource {
                         );
                     }
                     if (context.wantBranches()) {
-                        discoverBranches(repository, walk, request, remoteReferences);
+                        discoverBranches(client, remoteName, repository, walk, request);
                     }
                     if (context.wantTags()) {
                         discoverTags(repository, walk, request, remoteReferences);
@@ -541,26 +541,25 @@ public abstract class AbstractGitSCMSource extends SCMSource {
                 return null;
             }
 
-            private void discoverBranches(final Repository repository,
-                                          final RevWalk walk, GitSCMSourceRequest request,
-                                          Map<String, ObjectId> remoteReferences)
+            private void discoverBranches(GitClient client, String remoteName, final Repository repository,
+                                          final RevWalk walk, GitSCMSourceRequest request)
                     throws IOException, InterruptedException {
-                listener.getLogger().println("Checking branches...");
+                listener.getLogger().println("Getting remote branches...");
                 walk.setRetainBody(false);
                 int count = 0;
-                for (final Map.Entry<String, ObjectId> ref : remoteReferences.entrySet()) {
-                    if (!ref.getKey().startsWith(Constants.R_HEADS)) {
+                for (final Branch b : client.getRemoteBranches()) {
+                    if (!b.getName().startsWith(remoteName + "/")) {
                         continue;
                     }
                     count++;
-                    final String branchName = StringUtils.removeStart(ref.getKey(), Constants.R_HEADS);
+                    final String branchName = StringUtils.removeStart(b.getName(), remoteName + "/");
                     if (request.process(new SCMHead(branchName),
                             new SCMSourceRequest.IntermediateLambda<ObjectId>() {
                                 @Nullable
                                 @Override
                                 public ObjectId create() throws IOException, InterruptedException {
                                     listener.getLogger().println("  Checking branch " + branchName);
-                                    return ref.getValue();
+                                    return b.getSHA1();
                                 }
                             },
                             new SCMSourceRequest.ProbeLambda<SCMHead, ObjectId>() {
@@ -579,7 +578,7 @@ public abstract class AbstractGitSCMSource extends SCMSource {
                                 @Override
                                 public SCMRevision create(@NonNull SCMHead head, @Nullable ObjectId intermediate)
                                         throws IOException, InterruptedException {
-                                    return new SCMRevisionImpl(head, ref.getValue().name());
+                                    return new SCMRevisionImpl(head, b.getSHA1String());
                                 }
                             }, new SCMSourceRequest.Witness() {
                                 @Override
@@ -1144,10 +1143,10 @@ public abstract class AbstractGitSCMSource extends SCMSource {
         }
         return result;
     }
-    
+
     /**
      * Returns true if the branchName isn't matched by includes or is matched by excludes.
-     * 
+     *
      * @param branchName name of branch to be tested
      * @return true if branchName is excluded or is not included
      * @deprecated use {@link WildcardSCMSourceFilterTrait}
@@ -1158,10 +1157,10 @@ public abstract class AbstractGitSCMSource extends SCMSource {
     protected boolean isExcluded (String branchName){
       return !Pattern.matches(getPattern(getIncludes()), branchName) || (Pattern.matches(getPattern(getExcludes()), branchName));
     }
-    
+
     /**
-     * Returns the pattern corresponding to the branches containing wildcards. 
-     * 
+     * Returns the pattern corresponding to the branches containing wildcards.
+     *
      * @param branches branch names to evaluate
      * @return pattern corresponding to the branches containing wildcards
      */
